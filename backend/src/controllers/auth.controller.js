@@ -1,6 +1,12 @@
 import User from "../models/User.js"
 import jwt from "jsonwebtoken"
 
+
+const generateToken = (userId) => {
+  return jwt.sign({ userId }, process.env.JWT_SECRET, {
+    expiresIn: '7d', 
+  });
+};
 export async function signup(req, res) {
   const { email, password, fullName } = req.body;
   console.log('Request body:', req.body);
@@ -52,16 +58,12 @@ if (typeof password !== "string" || password.trim().length < 6) {
 
     // ✅ Save user before creating token
     await newUser.save();
-
-    const token = jwt.sign({ userId: newUser._id }, process.env.JWT_SECRET, {
-      expiresIn: '1h',
-    });
-
+    console.log('New user created:', newUser);
+  const token = generateToken(newUser._id);
     res.cookie('token', token, {
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
       httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
     return res.status(201).json({
@@ -86,8 +88,68 @@ if (typeof password !== "string" || password.trim().length < 6) {
 
 
 export async function login(req, res) {
-    res.send('Login Page');
+  try {
+    const { email, password } = req.body;
+    console.log('Login request body:', req.body);
+
+    if (!email?.trim() || !password?.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and password are required',
+      });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password',
+      });
+    }
+
+    const isMatch = await user.comparePassword(password);
+    console.log('✨ enteredPassword:', password);
+    console.log('🔒 storedHash:', user.password);
+    console.log('✅ password match?:', isMatch);
+
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password',
+      });
+    }
+
+    const token = generateToken(user._id);
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      sameSite: 'Strict',
+      path: '/',
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Login successful',
+      user: {
+        id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        profilePicture: user.profilePicture,
+      },
+    });
+
+  } catch (error) {
+    console.error('Login Error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+    });
+  }
 }
+
+
+
 export async function logout(req, res) {
     res.send('Logout Page');
 }
