@@ -1,3 +1,4 @@
+import cloudinary from "../lib/cloudinary.js";
 import User from "../models/User.js"
 import jwt from "jsonwebtoken"
 
@@ -167,5 +168,61 @@ export async function logout(req, res) {
 }
 
 
-export const updateProfile = async (req, res) => {}
-  
+export const updateProfile = async (req, res) => {
+  try {
+
+    const {profilePic} = req.body;
+    const userId = req.user._id;
+    if (!profilePic) {
+      return res.status(400).json({
+        success: false,
+        message: 'Profile picture is required',
+      });
+    }
+    const uploadResponse = await cloudinary.uploader.upload(profilePic)
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { profilePicture: uploadResponse.secure_url },
+      { new: true }
+    ).select('-password');
+    if (!updatedUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+    return res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully',
+      user: {
+        id: updatedUser._id,
+        fullName: updatedUser.fullName,
+        email: updatedUser.email,
+        profilePicture: updatedUser.profilePicture,
+      },
+    });
+  } catch (error) {
+    console.error('Update Profile Error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+    });
+    
+  }
+}
+
+
+
+export const checkAuth = async (req, res) => {
+  try {
+res.status(200).json(
+  req.user
+);
+  } catch (error) {
+    console.error('Check Auth Error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+    });
+  }
+}
